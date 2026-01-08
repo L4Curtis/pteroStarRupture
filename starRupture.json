@@ -1,0 +1,42 @@
+{
+  "_comment": "Egg for StarRupture using struppinet/starrupture-dedicated-server",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-01-08T23:00:00+01:00",
+  "name": "StarRupture",
+  "author": "admin@example.com",
+  "description": "StarRupture Dedicated Server (Wine) using Docker image struppinet/starrupture-dedicated-server. Installs/updates via SteamCMD on startup (appid 3809400).",
+  "features": [],
+  "docker_images": {
+    "StarRupture (struppinet)": "struppinet/starrupture-dedicated-server:latest"
+  },
+  "file_denylist": [],
+  "startup": "/home/container/scripts/start.sh",
+  "config": {
+    "files": "{}",
+    "startup": "{\n  \"done\": \"Launching StarRupture Dedicated Server\"\n}",
+    "logs": "{}",
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\n# No installation step needed: image start.sh handles SteamCMD + install/update at runtime.\necho \"No installation script - handled by container startup.\"",
+      "container": "ghcr.io/parkervcp/installers:debian",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Server Port",
+      "description": "UDP gameplay port (must match your allocation). Default: 7777",
+      "env_variable": "SERVER_PORT",
+      "default_value": "7777",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|numeric|between:1,65535",
+      "field_type": "text"
+    }
+  ]
+}
