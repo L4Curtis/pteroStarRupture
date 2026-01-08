@@ -7,7 +7,7 @@
   "exported_at": "2026-01-08T10:00:00+00:00",
   "name": "StarRupture",
   "author": "support@example.com",
-  "description": "Dedicated game server for the StarRupture game. A multiplayer survival and crafting experience.",
+  "description": "Dedicated game server for the StarRupture game. A multiplayer survival and crafting experience. Start the server and connect in-game to set passwords.",
   "features": [
     "steam_disk_space"
   ],
@@ -15,16 +15,16 @@
     "Wine": "ghcr.io/pterodactyl/yolks:wine_latest"
   },
   "file_denylist": [],
-  "startup": "wine64 .\\\\StarRuptureServer.exe -log -Port={{SERVER_PORT}}",
+  "startup": "xvfb-run --auto-servernum wine /home/container/StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe -Log -port={{SERVER_PORT}}",
   "config": {
     "files": "{}",
-    "startup": "{\r\n \"done\": \"Server started successfully\"\r\n}",
+    "startup": "{\r\n \"done\": \"LogInit: Display:\"\r\n}",
     "logs": "{}",
     "stop": "^C"
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\r\n# StarRupture Installation Script\r\n#\r\n# Server Files: /mnt/server\r\n# Image to install with is 'ghcr.io/parkervcp/installers:debian'\r\n\r\nset -e\r\n\r\n## Install packages\r\napt -y update\r\napt -y --no-install-recommends install curl lib32gcc-s1 ca-certificates software-properties-common\r\n\r\n## Add i386 architecture for steamcmd\r\ndpkg --add-architecture i386\r\napt update\r\n\r\n## Set steam user\r\nif [[ \"${STEAM_USER}\" == \"\" ]] || [[ \"${STEAM_PASS}\" == \"\" ]]; then\r\n    echo -e \"Steam user is not set.\"\r\n    echo -e \"Using anonymous user.\"\r\n    STEAM_USER=anonymous\r\n    STEAM_PASS=\"\"\r\n    STEAM_AUTH=\"\"\r\nelse\r\n    echo -e \"User set to ${STEAM_USER}\"\r\nfi\r\n\r\n## Download and install steamcmd\r\ncd /tmp\r\nmkdir -p /mnt/server/steamcmd\r\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\r\ntar -xzvf steamcmd.tar.gz -C /mnt/server/steamcmd\r\nmkdir -p /mnt/server/steamapps\r\ncd /mnt/server/steamcmd\r\n\r\n# Fix permissions\r\nchown -R root:root /mnt\r\nexport HOME=/mnt/server\r\n\r\n## Install game using steamcmd\r\necho \"Installing StarRupture Dedicated Server...\"\r\n./steamcmd.sh +force_install_dir /mnt/server/server_files \\\r\n    +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\r\n    +@sSteamCmdForcePlatformType windows \\\r\n    +app_update ${SRCDS_APPID} validate \\\r\n    +quit\r\n\r\n## Set up 32 bit libraries\r\nmkdir -p /mnt/server/.steam/sdk32\r\ncp -v linux32/steamclient.so ../.steam/sdk32/steamclient.so\r\n\r\n## Set up 64 bit libraries\r\nmkdir -p /mnt/server/.steam/sdk64\r\ncp -v linux64/steamclient.so ../.steam/sdk64/steamclient.so\r\n\r\n## Create savegame directory\r\nmkdir -p /mnt/server/server_files/StarRupture/Saved/SaveGames\r\n\r\n## Change to server directory\r\ncd /mnt/server/server_files\r\n\r\necho \"-----------------------------------------\"\r\necho \"Installation completed...\"\r\necho \"Server will start on port ${SERVER_PORT}\"\r\necho \"Connect in-game to set passwords\"\r\necho \"-----------------------------------------\"",
+      "script": "#!/bin/bash\r\n# StarRupture Installation Script\r\n#\r\n# Server Files: /mnt/server\r\n\r\nset -e\r\n\r\ncd /tmp\r\n\r\n## Set steam user\r\nif [[ \"${STEAM_USER}\" == \"\" ]] || [[ \"${STEAM_PASS}\" == \"\" ]]; then\r\n    echo -e \"Steam user is not set.\"\r\n    echo -e \"Using anonymous user.\"\r\n    STEAM_USER=anonymous\r\n    STEAM_PASS=\"\"\r\n    STEAM_AUTH=\"\"\r\nelse\r\n    echo -e \"User set to ${STEAM_USER}\"\r\nfi\r\n\r\n## Download and install steamcmd\r\necho \"Installing Steam\"\r\nmkdir -p /mnt/server/steamcmd\r\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\r\ntar -xzvf steamcmd.tar.gz -C /mnt/server/steamcmd\r\nmkdir -p /mnt/server/steamapps\r\ncd /mnt/server/steamcmd\r\n\r\n# Fix permissions\r\nchown -R root:root /mnt\r\nexport HOME=/mnt/server\r\n\r\n## Install game using steamcmd\r\necho \"Installing/Updating StarRupture Dedicated Server files...\"\r\n./steamcmd.sh +force_install_dir /mnt/server \\\r\n    +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\r\n    +@sSteamCmdForcePlatformType windows \\\r\n    +app_update ${SRCDS_APPID} validate \\\r\n    +quit\r\n\r\nexit_code=$?\r\nif [ $exit_code -ne 0 ]; then\r\n    echo \"\"\r\n    echo \"SteamCmd failed with exit code: $exit_code\"\r\n    echo \"Try deleting the appmanifest file or clear the whole server directory\"\r\n    echo \"\"\r\n    exit 1\r\nelse\r\n    echo \"\"\r\n    echo \"SteamCmd finished successfully (Exit Code: $exit_code)\"\r\n    echo \"\"\r\nfi\r\n\r\n## Set up 32 bit libraries\r\nmkdir -p /mnt/server/.steam/sdk32\r\ncp -v linux32/steamclient.so ../.steam/sdk32/steamclient.so 2>/dev/null || true\r\n\r\n## Set up 64 bit libraries\r\nmkdir -p /mnt/server/.steam/sdk64\r\ncp -v linux64/steamclient.so ../.steam/sdk64/steamclient.so 2>/dev/null || true\r\n\r\n## Create savegame directory\r\necho \"Creating savegame directory\"\r\nmkdir -p /mnt/server/StarRupture/Saved/SaveGames\r\n\r\necho \"-----------------------------------------\"\r\necho \"Installation completed...\"\r\necho \"Server will start on port ${SERVER_PORT}\"\r\necho \"Connect in-game to set passwords\"\r\necho \"-----------------------------------------\"",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
@@ -32,12 +32,12 @@
   "variables": [
     {
       "name": "App ID",
-      "description": "Steam App ID for StarRupture Dedicated Server",
+      "description": "Steam App ID for StarRupture Dedicated Server. DO NOT EDIT!",
       "env_variable": "SRCDS_APPID",
-      "default_value": "3261450",
+      "default_value": "3809400",
       "user_viewable": false,
       "user_editable": false,
-      "rules": "required|string|in:3261450",
+      "rules": "required|string|in:3809400",
       "field_type": "text"
     },
     {
@@ -52,7 +52,7 @@
     },
     {
       "name": "Server Port",
-      "description": "The port that clients will connect to for gameplay. Default is 7777.",
+      "description": "The port that clients will connect to for gameplay. Default is 7777. Must be UDP.",
       "env_variable": "SERVER_PORT",
       "default_value": "7777",
       "user_viewable": true,
