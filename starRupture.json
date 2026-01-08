@@ -1,19 +1,19 @@
 {
-  "_comment": "Egg for StarRupture using struppinet/starrupture-dedicated-server",
+  "_comment": "Egg StarRupture - fixed for Pterodactyl/Pelican volume mount (/home/container).",
   "meta": {
     "version": "PTDL_v2",
     "update_url": null
   },
-  "exported_at": "2026-01-08T23:00:00+01:00",
+  "exported_at": "2026-01-08T23:30:00+01:00",
   "name": "StarRupture",
   "author": "admin@example.com",
-  "description": "StarRupture Dedicated Server (Wine) using Docker image struppinet/starrupture-dedicated-server. Installs/updates via SteamCMD on startup (appid 3809400).",
+  "description": "StarRupture Dedicated Server (Wine) using struppinet/starrupture-dedicated-server. Fix: start script is created inside server files because /home/container is a mounted volume.",
   "features": [],
   "docker_images": {
     "StarRupture (struppinet)": "struppinet/starrupture-dedicated-server:latest"
   },
   "file_denylist": [],
-  "startup": "/home/container/scripts/start.sh",
+  "startup": "bash ./start.sh",
   "config": {
     "files": "{}",
     "startup": "{\n  \"done\": \"Launching StarRupture Dedicated Server\"\n}",
@@ -22,7 +22,7 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# No installation step needed: image start.sh handles SteamCMD + install/update at runtime.\necho \"No installation script - handled by container startup.\"",
+      "script": "#!/bin/bash\nset -euo pipefail\n\ncd /mnt/server\n\ncat > start.sh <<'EOF'\n#!/bin/bash\n\necho \" \"\necho \"Startup\"\necho \" \"\n\nserver_files=\"/home/container/server_files\"\necho \"server path: $server_files\"\nsavegame_files=\"/home/container/server_files/StarRupture/Saved/SaveGames\"\necho \"savegame path: $savegame_files\"\n\necho \" \"\necho \"Installing Steam\"\necho \" \"\n\nsteam_path=/home/container/steamcmd\nmkdir -p \"$steam_path\"\ncurl -sSL -o \"$steam_path/steamcmd.tar.gz\" https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzf \"$steam_path/steamcmd.tar.gz\" -C \"$steam_path\"\nsteamcmd=\"$steam_path/steamcmd.sh\"\necho \"Steam ... OK\"\n\necho \" \"\necho \"Installing/Updating StarRupture Dedicated Server files...\"\necho \" \"\n\n\"$steamcmd\" +@sSteamCmdForcePlatformType windows +force_install_dir \"$server_files\" +login anonymous +app_update 3809400 validate +quit\nexit_code=$?\n\nif [ \"$exit_code\" -ne 0 ]; then\n  echo \" \"\n  echo \"SteamCmd failed with exit code: $exit_code\"\n  echo \"Try deleting the appmanifest file or clear the whole server_files (installation only)\"\n  echo \" \"\n  exit 1\nelse\n  echo \" \"\n  echo \"SteamCmd finished successfully (Exit Code: $exit_code)\"\n  echo \" \"\nfi\n\necho \" \"\necho \"Configuring StarRupture Dedicated Server ...\"\necho \" \"\n\nSERVER_PORT=${SERVER_PORT:-7777}\necho \"Using port: $SERVER_PORT\"\n\necho \" \"\necho \"Launching StarRupture Dedicated Server\"\necho \" \"\n\ncd \"$server_files\"\nxvfb-run --auto-servernum wine \"$server_files/StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe\" -Log -port=$SERVER_PORT 2>&1\nEOF\n\nchmod +x /mnt/server/start.sh\necho \"Installed /mnt/server/start.sh\"",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
