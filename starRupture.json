@@ -5,10 +5,10 @@
     "update_url": null
   },
   "exported_at": "2026-01-12T00:00:00+01:00",
-  "name": "StarRupture Dedicated Server (Wine/Proton + SteamCMD)",
+  "name": "StarRupture Dedicated Server (Proton/Wine + SteamCMD)",
   "author": "curtis",
-  "uuid": "1c0e0d2f-6c4b-4a8f-8d43-6a5c3d0d4a91",
-  "description": "StarRupture dedicated server (Windows) on Linux via Wine/Proton. Installs with SteamCMD (AppID 3809400) and starts with xvfb-run + wine. Ports: Game 7777 (UDP+TCP), Query 27015 (UDP).",
+  "uuid": "9f6b0d2a-2a3f-4c6f-9c31-3c3a2f1b8c55",
+  "description": "StarRupture dedicated server (Windows) running on Linux via Wine/Proton. Installs using SteamCMD (AppID 3809400) and starts with xvfb-run + wine. Ports: Game 7777 (UDP+TCP), Query 27015 (UDP).",
   "features": [
     "steam_disk_space"
   ],
@@ -16,7 +16,7 @@
     "Proton": "ghcr.io/parkervcp/steamcmd:proton"
   },
   "file_denylist": [],
-  "startup": "cd /home/container || exit 1; echo \"Starting StarRupture...\"; export WINEDEBUG=-all; SERVER_EXEC=\"\"; for p in \"./StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe\" \"./StarRupture/Binaries/Win64/StarRuptureServerEOS.exe\" \"./StarRuptureServerEOS.exe\"; do [ -f \"$p\" ] && SERVER_EXEC=\"$p\" && break; done; if [ -z \"$SERVER_EXEC\" ]; then SERVER_EXEC=\"$(find . -maxdepth 8 -type f \\( -iname '*StarRuptureServerEOS*.exe' -o -iname '*Shipping.exe' \\) 2>/dev/null | head -n 1)\"; fi; if [ -z \"$SERVER_EXEC\" ]; then echo \"ERROR: StarRupture server executable not found in /home/container\"; echo \"Top-level listing:\"; ls -la; exit 1; fi; echo \"Found server exec: $SERVER_EXEC\"; CMD=\"xvfb-run --auto-servernum wine \\\"$SERVER_EXEC\\\" -Log -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\\\"{{SERVER_NAME}}\\\"\"; [ -n \"${MULTIHOME}\" ] && CMD=\"$CMD -MULTIHOME=${MULTIHOME}\"; [ -n \"${MAX_PLAYERS}\" ] && CMD=\"$CMD -MaxPlayers=${MAX_PLAYERS}\"; [ -n \"${ADDITIONAL_ARGS}\" ] && CMD=\"$CMD ${ADDITIONAL_ARGS}\"; echo \"Command: $CMD\"; eval \"$CMD\"",
+  "startup": "cd /home/container || exit 1; echo \"Starting StarRupture...\"; export WINEDEBUG=-all; SERVER_EXEC=\"\"; for p in \"./StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe\" \"./StarRupture/Binaries/Win64/StarRuptureServerEOS.exe\" \"./StarRuptureServerEOS.exe\"; do [ -f \"$p\" ] && SERVER_EXEC=\"$p\" && break; done; if [ -z \"$SERVER_EXEC\" ]; then SERVER_EXEC=\"$(find . -maxdepth 10 -type f \\( -iname '*StarRuptureServerEOS*.exe' -o -iname '*Shipping.exe' \\) 2>/dev/null | head -n 1)\"; fi; if [ -z \"$SERVER_EXEC\" ]; then echo \"ERROR: StarRupture server executable not found in /home/container\"; echo \"Listing:\"; ls -la; exit 1; fi; echo \"Found server exec: $SERVER_EXEC\"; CMD=\"xvfb-run --auto-servernum wine \\\"$SERVER_EXEC\\\" -Log -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\\\"{{SERVER_NAME}}\\\"\"; [ -n \"${MULTIHOME}\" ] && CMD=\"$CMD -MULTIHOME=${MULTIHOME}\"; [ -n \"${MAX_PLAYERS}\" ] && CMD=\"$CMD -MaxPlayers=${MAX_PLAYERS}\"; [ -n \"${ADDITIONAL_ARGS}\" ] && CMD=\"$CMD ${ADDITIONAL_ARGS}\"; echo \"Command: $CMD\"; eval \"$CMD\"",
   "config": {
     "files": "{}",
     "startup": "{\n  \"done\": \"Starting StarRupture\"\n}",
@@ -25,12 +25,26 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\nset -e\n\nAPPID=\"3809400\"\nSR_DIR=\"/mnt/server\"\n\n# Optional deps for fallback path\nif command -v apt-get >/dev/null 2>&1; then\n  apt-get update -y || true\n  # wine/xvfb are usually already present in proton image, but make sure unzip/xvfb exist\n  apt-get install -y --no-install-recommends unzip xvfb xauth ca-certificates curl || true\n  rm -rf /var/lib/apt/lists/* || true\nfi\n\n# Steam credentials (optional)\nif [[ -n \"${STEAM_USER}\" && -n \"${STEAM_PASS}\" ]]; then\n  echo \"Using Steam user: ${STEAM_USER}\"\nelse\n  echo \"steam user is not set or incomplete. Using anonymous user.\"\n  STEAM_USER=\"anonymous\"\n  STEAM_PASS=\"\"\n  STEAM_AUTH=\"\"\nfi\n\nmkdir -p \"${SR_DIR}/steamcmd\" \"${SR_DIR}/steamapps\"\n\necho \"==[1/2] Try Linux SteamCMD forcing Windows (64-bit)==\"\ncd /tmp\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\nrm -rf \"${SR_DIR}/steamcmd\"/* || true\ntar -xzf steamcmd_linux.tar.gz -C \"${SR_DIR}/steamcmd\"\ncd \"${SR_DIR}/steamcmd\"\n\nexport HOME=\"${SR_DIR}\"\n\nset +e\n./steamcmd.sh \\\n  +@sSteamCmdForcePlatformType windows \\\n  +@sSteamCmdForcePlatformBitness 64 \\\n  +force_install_dir \"${SR_DIR}\" \\\n  +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n  +app_update ${APPID} validate \\\n  +quit\nLINUX_RC=$?\nset -e\n\nif [ \"${LINUX_RC}\" -eq 0 ]; then\n  echo \"Linux SteamCMD install OK.\"\nelse\n  echo \"Linux SteamCMD failed (rc=${LINUX_RC}). Fallback to Windows SteamCMD via Wine...\"\n\n  echo \"==[2/2] Windows SteamCMD under Wine (xvfb)==\"\n  cd /tmp\n  curl -sSL -o steamcmd.zip https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip\n  mkdir -p \"${SR_DIR}/steamcmd_win\"\n  rm -rf \"${SR_DIR}/steamcmd_win\"/* || true\n  unzip -oq steamcmd.zip -d \"${SR_DIR}/steamcmd_win\"\n\n  cd \"${SR_DIR}/steamcmd_win\"\n\n  # IMPORTANT: map the install dir for wine as Z:\\mnt\\server\n  export WINEDEBUG=-all\n  xvfb-run --auto-servernum wine steamcmd.exe \\\n    +@sSteamCmdForcePlatformType windows \\\n    +force_install_dir \"Z:\\\\mnt\\\\server\" \\\n    +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n    +app_update ${APPID} validate \\\n    +quit\nfi\n\n# Create common directories (not mandatory but nice)\nmkdir -p \"${SR_DIR}/Saved/Logs\" \"${SR_DIR}/Saved/Config/WindowsServer\" \"${SR_DIR}/Saved/SaveGames\" || true\n\necho \"-----------------------------------------\"\necho \"Installation completed...\"\necho \"-----------------------------------------\"",
+      "script": "#!/bin/bash\nset -e\n\nAPPID=\"${SRCDS_APPID:-3809400}\"\nSR_DIR=\"/mnt/server\"\n\n# Ensure tools exist (proton image is usually fine, but keep it safe)\nif command -v apt-get >/dev/null 2>&1; then\n  apt-get update -y || true\n  apt-get install -y --no-install-recommends unzip xvfb xauth ca-certificates curl || true\n  rm -rf /var/lib/apt/lists/* || true\nfi\n\n# Steam credentials (optional)\nif [[ -n \"${STEAM_USER}\" && -n \"${STEAM_PASS}\" ]]; then\n  echo \"Using Steam user: ${STEAM_USER}\"\nelse\n  echo \"steam user is not set or incomplete. Using anonymous user.\"\n  STEAM_USER=\"anonymous\"\n  STEAM_PASS=\"\"\n  STEAM_AUTH=\"\"\nfi\n\nmkdir -p \"${SR_DIR}/steamcmd\" \"${SR_DIR}/steamapps\"\n\n# -------- Attempt 1: Linux steamcmd forcing Windows 64-bit --------\necho \"==[1/2] Try Linux SteamCMD forcing Windows (64-bit)==\"\ncd /tmp\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\nrm -rf \"${SR_DIR}/steamcmd\"/* || true\ntar -xzf steamcmd_linux.tar.gz -C \"${SR_DIR}/steamcmd\"\ncd \"${SR_DIR}/steamcmd\"\n\nexport HOME=\"${SR_DIR}\"\n\nset +e\n./steamcmd.sh \\\n  +@sSteamCmdForcePlatformType windows \\\n  +@sSteamCmdForcePlatformBitness 64 \\\n  +force_install_dir \"${SR_DIR}\" \\\n  +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n  +app_update ${APPID} validate \\\n  +quit\nLINUX_RC=$?\nset -e\n\nif [ \"${LINUX_RC}\" -eq 0 ]; then\n  echo \"Linux SteamCMD install OK.\"\nelse\n  # -------- Attempt 2: Windows steamcmd under wine (xvfb) --------\n  echo \"Linux SteamCMD failed (rc=${LINUX_RC}). Fallback to Windows SteamCMD via Wine...\"\n\n  cd /tmp\n  curl -sSL -o steamcmd.zip https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip\n  mkdir -p \"${SR_DIR}/steamcmd_win\"\n  rm -rf \"${SR_DIR}/steamcmd_win\"/* || true\n  unzip -oq steamcmd.zip -d \"${SR_DIR}/steamcmd_win\"\n\n  cd \"${SR_DIR}/steamcmd_win\"\n  export WINEDEBUG=-all\n\n  xvfb-run --auto-servernum wine steamcmd.exe \\\n    +@sSteamCmdForcePlatformType windows \\\n    +force_install_dir \"Z:\\\\mnt\\\\server\" \\\n    +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n    +app_update ${APPID} validate \\\n    +quit\nfi\n\nmkdir -p \"${SR_DIR}/Saved/Logs\" \"${SR_DIR}/Saved/Config/WindowsServer\" \"${SR_DIR}/Saved/SaveGames\" || true\n\necho \"-----------------------------------------\"\necho \"Installation completed.\"\necho \"-----------------------------------------\"",
       "container": "ghcr.io/parkervcp/steamcmd:proton",
       "entrypoint": "bash"
     }
   },
   "variables": [
+    {
+      "name": "App ID",
+      "description": "Required by the Proton image entrypoint (do not remove).",
+      "env_variable": "SRCDS_APPID",
+      "default_value": "3809400",
+      "user_viewable": false,
+      "user_editable": false,
+      "rules": [
+        "required",
+        "integer",
+        "in:3809400"
+      ],
+      "sort": 1
+    },
     {
       "name": "Server Name",
       "description": "Dedicated server display name (-ServerName=\"...\")",
@@ -43,7 +57,7 @@
         "string",
         "max:256"
       ],
-      "sort": 1
+      "sort": 2
     },
     {
       "name": "Query Port",
@@ -58,11 +72,11 @@
         "min:1025",
         "max:65535"
       ],
-      "sort": 2
+      "sort": 3
     },
     {
       "name": "Max Players",
-      "description": "Optional (-MaxPlayers=#). Leave blank if you don't want to set it.",
+      "description": "Optional (-MaxPlayers=#). Leave blank to not set it.",
       "env_variable": "MAX_PLAYERS",
       "default_value": "",
       "user_viewable": true,
@@ -73,7 +87,7 @@
         "min:1",
         "max:128"
       ],
-      "sort": 3
+      "sort": 4
     },
     {
       "name": "MultiHome",
@@ -87,7 +101,7 @@
         "string",
         "max:64"
       ],
-      "sort": 4
+      "sort": 5
     },
     {
       "name": "Additional Args",
@@ -101,7 +115,7 @@
         "string",
         "max:1024"
       ],
-      "sort": 5
+      "sort": 6
     },
     {
       "name": "Steam Username (optional)",
@@ -115,7 +129,7 @@
         "string",
         "max:128"
       ],
-      "sort": 6
+      "sort": 7
     },
     {
       "name": "Steam Password (optional)",
@@ -129,7 +143,7 @@
         "string",
         "max:128"
       ],
-      "sort": 7
+      "sort": 8
     },
     {
       "name": "Steam 2FA Code (optional)",
@@ -143,7 +157,7 @@
         "string",
         "max:16"
       ],
-      "sort": 8
+      "sort": 9
     }
   ]
 }
