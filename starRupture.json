@@ -4,10 +4,11 @@
     "version": "PLCN_v1",
     "update_url": null
   },
-  "exported_at": "2026-01-12T23:30:00+01:00",
-  "name": "StarRupture Dedicated Server (SteamCMD)",
+  "exported_at": "2026-01-13T00:15:00+01:00",
+  "name": "StarRupture Dedicated Server (SteamCMD Anonymous Robust | Pelican)",
   "author": "curtis",
-  "description": "StarRupture Dedicated Server installed via SteamCMD (AppID 3809400) and started with official launch parameters using Wine. Pelican compatible.",
+  "uuid": "2d4cfb1f-1c3a-4e33-8e07-7bdb67f9c5a1",
+  "description": "StarRupture Dedicated Server installed via SteamCMD (AppID 3809400) with anonymous login (robust mode: app_info_update + retries + appinfo purge). Runs Windows server via Wine on Pelican. Installs/starts from /mnt/server.",
   "features": [
     "steam_disk_space"
   ],
@@ -15,16 +16,16 @@
     "Wine + SteamCMD": "ghcr.io/parkervcp/yolks:wine_staging"
   },
   "file_denylist": [],
-  "startup": "bash -lc 'cd /home/container || exit 1\n\nexport HOME=/home/container\nexport WINEPREFIX=/home/container/.wine\nexport WINEDEBUG=-all\n\nmkdir -p \"$WINEPREFIX\"\n\n# First Wine init\nif [ ! -f \"$WINEPREFIX/.init_done\" ]; then\n  echo \"[SR] Initializing Wine\"\n  wineboot -u || true\n  touch \"$WINEPREFIX/.init_done\"\nfi\n\n# Locate server binary (official name)\nSERVER_EXE=\"./StarRuptureServerEOS.exe\"\nif [ ! -f \"$SERVER_EXE\" ]; then\n  SERVER_EXE=\"$(find . -maxdepth 3 -type f -iname 'StarRuptureServerEOS.exe' | head -n 1)\"\nfi\n\nif [ -z \"$SERVER_EXE\" ] || [ ! -f \"$SERVER_EXE\" ]; then\n  echo \"[SR] ERROR: StarRuptureServerEOS.exe not found\"\n  ls -la\n  exit 1\nfi\n\n# Build official arguments\nARGS=\"-Log -Port=${SERVER_PORT} -QueryPort=${QUERY_PORT} -ServerName=\\\"${SERVER_NAME}\\\"\"\n[ -n \"${MULTIHOME}\" ] && ARGS=\"$ARGS -MULTIHOME=${MULTIHOME}\"\n[ -n \"${MAX_PLAYERS}\" ] && ARGS=\"$ARGS -MaxPlayers=${MAX_PLAYERS}\"\n\necho \"[SR] Starting server: $SERVER_EXE $ARGS\"\n\nwine \"$SERVER_EXE\" $ARGS'",
+  "startup": "bash -lc 'set -e\ncd /mnt/server || { echo \"[SR] ERROR: /mnt/server not mounted. Add a volume mount for /mnt/server\"; exit 1; }\n\nexport HOME=/mnt/server\nexport WINEPREFIX=/mnt/server/.wine\nexport WINEDEBUG=-all\nmkdir -p \"$WINEPREFIX\"\n\n# Init Wine prefix once\nif [ ! -f \"$WINEPREFIX/.init_done\" ]; then\n  echo \"[SR] Initializing Wine prefix\"\n  wineboot -u || true\n  touch \"$WINEPREFIX/.init_done\"\nfi\n\n# Locate server exe (official)\nSERVER_EXE=\"./StarRuptureServerEOS.exe\"\nif [ ! -f \"$SERVER_EXE\" ]; then\n  SERVER_EXE=\"$(find . -maxdepth 5 -type f -iname \"StarRuptureServerEOS.exe\" 2>/dev/null | head -n 1)\"\nfi\n\nif [ -z \"$SERVER_EXE\" ] || [ ! -f \"$SERVER_EXE\" ]; then\n  echo \"[SR] ERROR: StarRuptureServerEOS.exe not found in /mnt/server.\"\n  echo \"[SR] You must run Reinstall so SteamCMD downloads AppID 3809400.\"\n  echo \"[SR] Current files:\"; ls -la\n  exit 1\nfi\n\n# Build official args\nARGS=\"-Log -Port=${SERVER_PORT} -QueryPort=${QUERY_PORT} -ServerName=\\\"${SERVER_NAME}\\\"\"\n[ -n \"${MULTIHOME:-}\" ] && ARGS=\"$ARGS -MULTIHOME=${MULTIHOME}\"\n[ -n \"${MAX_PLAYERS:-}\" ] && ARGS=\"$ARGS -MaxPlayers=${MAX_PLAYERS}\"\n[ -n \"${EXTRA_ARGS:-}\" ] && ARGS=\"$ARGS ${EXTRA_ARGS}\"\n\necho \"[SR] Starting: $SERVER_EXE $ARGS\"\nexec wine \"$SERVER_EXE\" $ARGS'",
   "config": {
     "files": "{}",
-    "startup": "{\n  \"done\": \"Starting StarRupture\"\n}",
+    "startup": "{\n  \"done\": \"[SR] Starting:\"\n}",
     "logs": "{}",
     "stop": "^C"
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\nset -e\n\nAPPID=3809400\n\nmkdir -p /mnt/server/steamcmd\ncd /mnt/server/steamcmd\n\n# Download SteamCMD\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzf steamcmd_linux.tar.gz\n\nmkdir -p /mnt/server/steamapps\n\n# Install StarRupture Dedicated Server (Windows)\n./steamcmd.sh \\\n  +@ShutdownOnFailedCommand 1 \\\n  +@NoPromptForPassword 1 \\\n  +@sSteamCmdForcePlatformType windows \\\n  +force_install_dir /mnt/server \\\n  +login anonymous \\\n  +app_update ${APPID} validate \\\n  +quit\n\n# Validate install\nif [ ! -f \"/mnt/server/StarRuptureServerEOS.exe\" ]; then\n  echo \"[SR] ERROR: StarRuptureServerEOS.exe not found after install\"\n  find /mnt/server -type f\n  exit 1\nfi\n\necho \"[SR] StarRupture installation complete\"",
+      "script": "#!/bin/bash\nset -euo pipefail\n\nAPPID=3809400\nINSTALL_DIR=/mnt/server\n\nmkdir -p \"${INSTALL_DIR}/steamcmd\" \"${INSTALL_DIR}/steamapps\"\ncd \"${INSTALL_DIR}/steamcmd\"\n\necho \"[SR] Downloading SteamCMD...\"\nrm -f steamcmd_linux.tar.gz || true\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\nrm -rf ./* || true\ntar -xzf steamcmd_linux.tar.gz\n\npurge_appinfo() {\n  # common locations depending on steamcmd behavior\n  rm -f \"${INSTALL_DIR}/Steam/appcache/appinfo.vdf\" \"${INSTALL_DIR}/Steam/appcache/packageinfo.vdf\" 2>/dev/null || true\n  rm -f \"${INSTALL_DIR}/steamcmd/Steam/appcache/appinfo.vdf\" \"${INSTALL_DIR}/steamcmd/Steam/appcache/packageinfo.vdf\" 2>/dev/null || true\n}\n\npurge_appinfo\n\necho \"[SR] Installing AppID ${APPID} (windows/64) using anonymous...\"\nOK=0\nfor TRY in 1 2 3; do\n  echo \"[SR] Attempt ${TRY}/3\"\n  set +e\n  ./steamcmd.sh \\\n    +@ShutdownOnFailedCommand 1 \\\n    +@NoPromptForPassword 1 \\\n    +@sSteamCmdForcePlatformType windows \\\n    +@sSteamCmdForcePlatformBitness 64 \\\n    +force_install_dir \"${INSTALL_DIR}\" \\\n    +login anonymous \\\n    +app_info_update 1 \\\n    +app_update ${APPID} validate \\\n    +quit\n  RC=$?\n  set -e\n\n  if [ \"$RC\" -eq 0 ]; then\n    OK=1\n    break\n  fi\n\n  echo \"[SR] SteamCMD failed (rc=$RC). Purging appinfo cache and retrying...\"\n  purge_appinfo\n  sleep 5\n\ndone\n\nif [ \"$OK\" -ne 1 ]; then\n  echo \"[SR] ERROR: SteamCMD could not install AppID ${APPID}.\"\n  echo \"[SR] If you keep seeing 'Missing configuration', try again later OR use a Steam account (then we can adapt the egg).\"\n  exit 1\nfi\n\n# Validate installed binary\nif [ ! -f \"${INSTALL_DIR}/StarRuptureServerEOS.exe\" ]; then\n  echo \"[SR] ERROR: StarRuptureServerEOS.exe not found after install.\"\n  echo \"[SR] Listing .exe candidates:\"; find \"${INSTALL_DIR}\" -maxdepth 6 -type f -iname \"*StarRupture*exe\" | head -n 200 || true\n  exit 1\nfi\n\necho \"[SR] Installation complete.\"\n",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
@@ -32,7 +33,7 @@
   "variables": [
     {
       "name": "Server Name",
-      "description": "Server name shown in the in-game server list",
+      "description": "Server name displayed in-game (-ServerName).",
       "env_variable": "SERVER_NAME",
       "default_value": "My Starrupture Server",
       "user_viewable": true,
@@ -42,7 +43,7 @@
     },
     {
       "name": "Query Port",
-      "description": "Steam query port (UDP)",
+      "description": "Query port (UDP) (-QueryPort). Ensure this port is allocated/open in Pelican.",
       "env_variable": "QUERY_PORT",
       "default_value": "27015",
       "user_viewable": true,
@@ -52,7 +53,7 @@
     },
     {
       "name": "MultiHome",
-      "description": "Bind server to a specific IP address (-MULTIHOME)",
+      "description": "Optional bind IP (-MULTIHOME). Leave empty for default.",
       "env_variable": "MULTIHOME",
       "default_value": "",
       "user_viewable": true,
@@ -62,13 +63,23 @@
     },
     {
       "name": "Max Players",
-      "description": "Maximum number of players (-MaxPlayers)",
+      "description": "Optional maximum players (-MaxPlayers). Leave empty to use default.",
       "env_variable": "MAX_PLAYERS",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
       "rules": ["nullable", "integer", "min:1", "max:200"],
       "sort": 4
+    },
+    {
+      "name": "Extra Args",
+      "description": "Optional extra CLI arguments appended at the end (advanced).",
+      "env_variable": "EXTRA_ARGS",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": ["nullable", "string", "max:1024"],
+      "sort": 5
     }
   ]
 }
