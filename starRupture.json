@@ -5,10 +5,10 @@
     "update_url": null
   },
   "exported_at": "2026-01-12T00:00:00+01:00",
-  "name": "StarRupture Dedicated Server (Debian + Wine + SteamCMD)",
+  "name": "StarRupture Dedicated Server (SteamCMD fix + Wine)",
   "author": "curtis",
-  "uuid": "c7a4a8c1-3b25-4f8f-9f5e-0f1a8d9c4c11",
-  "description": "StarRupture dedicated server (Windows) running on Linux via Wine + xvfb. Installs with SteamCMD (AppID 3809400). No Proton entrypoint requirements.",
+  "uuid": "2b6a4c3c-2c7e-4c3a-9d3b-7a4f2c6c1f10",
+  "description": "StarRupture Dedicated Server (AppID 3809400) on Linux via Wine+xvfb. Includes SteamCMD cache cleanup + app_info_update + retries to mitigate 'Missing configuration'.",
   "features": [
     "steam_disk_space"
   ],
@@ -16,7 +16,7 @@
     "Debian": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "file_denylist": [],
-  "startup": "cd /home/container || exit 1; echo \"Starting StarRupture...\"; export WINEDEBUG=-all; SERVER_EXEC=\"\"; for p in \"./StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe\" \"./StarRupture/Binaries/Win64/StarRuptureServerEOS.exe\" \"./StarRuptureServerEOS.exe\"; do [ -f \"$p\" ] && SERVER_EXEC=\"$p\" && break; done; if [ -z \"$SERVER_EXEC\" ]; then SERVER_EXEC=\"$(find . -maxdepth 10 -type f \\( -iname '*StarRuptureServerEOS*.exe' -o -iname '*Shipping.exe' \\) 2>/dev/null | head -n 1)\"; fi; if [ -z \"$SERVER_EXEC\" ]; then echo \"ERROR: StarRupture server executable not found in /home/container\"; echo \"Listing:\"; ls -la; exit 1; fi; echo \"Found server exec: $SERVER_EXEC\"; CMD=\"xvfb-run --auto-servernum wine \\\"$SERVER_EXEC\\\" -Log -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\\\"{{SERVER_NAME}}\\\"\"; [ -n \"${MULTIHOME}\" ] && CMD=\"$CMD -MULTIHOME=${MULTIHOME}\"; [ -n \"${MAX_PLAYERS}\" ] && CMD=\"$CMD -MaxPlayers=${MAX_PLAYERS}\"; [ -n \"${ADDITIONAL_ARGS}\" ] && CMD=\"$CMD ${ADDITIONAL_ARGS}\"; echo \"Command: $CMD\"; eval \"$CMD\"",
+  "startup": "cd /home/container || exit 1; echo \"Starting StarRupture...\"; export WINEDEBUG=-all; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; SERVER_EXEC=\"\"; for p in \"./StarRuptureServerEOS.exe\" \"./StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe\" \"./StarRupture/Binaries/Win64/StarRuptureServerEOS.exe\" \"./StarRuptureServerEOS-Win64-Shipping.exe\"; do [ -f \"$p\" ] && SERVER_EXEC=\"$p\" && break; done; if [ -z \"$SERVER_EXEC\" ]; then SERVER_EXEC=\"$(find . -maxdepth 12 -type f \\( -iname 'StarRuptureServerEOS*.exe' -o -iname '*Shipping.exe' \\) 2>/dev/null | head -n 1)\"; fi; if [ -z \"$SERVER_EXEC\" ]; then echo \"ERROR: Server files not found (no executable).\"; echo \"-> Run a REINSTALL so SteamCMD can download AppID 3809400.\"; echo \"Current dir:\"; pwd; echo \"Listing:\"; ls -la; exit 1; fi; echo \"Found server exec: $SERVER_EXEC\"; CMD=\"xvfb-run --auto-servernum wine \\\"$SERVER_EXEC\\\" -Log -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\\\"{{SERVER_NAME}}\\\"\"; [ -n \"${MULTIHOME}\" ] && CMD=\"$CMD -MULTIHOME=${MULTIHOME}\"; [ -n \"${MAX_PLAYERS}\" ] && CMD=\"$CMD -MaxPlayers=${MAX_PLAYERS}\"; [ -n \"${ADDITIONAL_ARGS}\" ] && CMD=\"$CMD ${ADDITIONAL_ARGS}\"; echo \"Command: $CMD\"; eval \"$CMD\"",
   "config": {
     "files": "{}",
     "startup": "{\n  \"done\": \"Starting StarRupture\"\n}",
@@ -25,7 +25,7 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\nset -e\n\nAPPID=\"3809400\"\nSR_DIR=\"/mnt/server\"\n\necho \"Installing dependencies (wine/xvfb)...\"\ndpkg --add-architecture i386 || true\napt-get update -y\napt-get install -y --no-install-recommends \\\n  ca-certificates curl unzip \\\n  wine wine32 wine64 \\\n  xvfb xauth \\\n  procps jq\nrm -rf /var/lib/apt/lists/*\n\n# Steam credentials (optional)\nif [[ -n \"${STEAM_USER}\" && -n \"${STEAM_PASS}\" ]]; then\n  echo \"Using Steam user: ${STEAM_USER}\"\nelse\n  echo \"Using anonymous Steam login\"\n  STEAM_USER=\"anonymous\"\n  STEAM_PASS=\"\"\n  STEAM_AUTH=\"\"\nfi\n\nmkdir -p \"${SR_DIR}/steamcmd\" \"${SR_DIR}/steamapps\"\ncd /tmp\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzf steamcmd_linux.tar.gz -C \"${SR_DIR}/steamcmd\"\ncd \"${SR_DIR}/steamcmd\"\n\nexport HOME=\"${SR_DIR}\"\n\n./steamcmd.sh \\\n  +@sSteamCmdForcePlatformType windows \\\n  +@sSteamCmdForcePlatformBitness 64 \\\n  +force_install_dir \"${SR_DIR}\" \\\n  +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n  +app_update ${APPID} validate \\\n  +quit\n\nmkdir -p \"${SR_DIR}/Saved/Logs\" \"${SR_DIR}/Saved/Config/WindowsServer\" \"${SR_DIR}/Saved/SaveGames\" || true\n\necho \"-----------------------------------------\"\necho \"Installation completed.\"\necho \"-----------------------------------------\"",
+      "script": "#!/bin/bash\nset -e\n\nexport LANG=C.UTF-8\nexport LC_ALL=C.UTF-8\n\nAPPID=\"3809400\"\nSR_DIR=\"/mnt/server\"\n\n# deps (wine/xvfb) for runtime\n# NOTE: install container is parkervcp/installers:debian, so apt is OK\napt-get update -y\n# wine on debian needs i386 arch\ndpkg --add-architecture i386 || true\napt-get update -y\napt-get install -y --no-install-recommends \\\n  ca-certificates curl unzip \\\n  wine wine32 wine64 \\\n  xvfb xauth \\\n  procps jq\nrm -rf /var/lib/apt/lists/*\n\n# Steam credentials (optional)\nif [[ -n \"${STEAM_USER}\" && -n \"${STEAM_PASS}\" ]]; then\n  echo \"Using Steam user: ${STEAM_USER}\"\nelse\n  echo \"Using anonymous Steam login\"\n  STEAM_USER=\"anonymous\"\n  STEAM_PASS=\"\"\n  STEAM_AUTH=\"\"\nfi\n\nmkdir -p \"${SR_DIR}/steamcmd\" \"${SR_DIR}/steamapps\"\ncd /tmp\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\nrm -rf \"${SR_DIR}/steamcmd\"/* || true\ntar -xzf steamcmd_linux.tar.gz -C \"${SR_DIR}/steamcmd\"\ncd \"${SR_DIR}/steamcmd\"\n\nexport HOME=\"${SR_DIR}\"\n\n# Mitigation for 'Missing configuration': purge cached app info, force app_info_update, retry\npurge_cache() {\n  mkdir -p \"${HOME}/Steam/appcache\" || true\n  rm -f \"${HOME}/Steam/appcache/appinfo.vdf\" \"${HOME}/Steam/appcache/packageinfo.vdf\" || true\n}\n\npurge_cache\n\nOK=0\nfor TRY in 1 2 3; do\n  echo \"---- SteamCMD install attempt ${TRY}/3 ----\"\n  set +e\n  ./steamcmd.sh \\\n    +@sSteamCmdForcePlatformType windows \\\n    +@sSteamCmdForcePlatformBitness 64 \\\n    +force_install_dir \"${SR_DIR}\" \\\n    +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n    +app_info_update 1 \\\n    +app_update ${APPID} validate \\\n    +quit\n  RC=$?\n  set -e\n\n  if [ \"$RC\" -eq 0 ]; then\n    OK=1\n    break\n  fi\n\n  echo \"SteamCMD failed (rc=$RC). Cleaning cache and retrying...\"\n  purge_cache\n  sleep 5\ndone\n\nif [ \"$OK\" -ne 1 ]; then\n  echo \"ERROR: SteamCMD could not install AppID ${APPID}.\"\n  echo \"If you keep seeing 'Missing configuration', try using a real Steam account (STEAM_USER/STEAM_PASS) until SteamCMD/Steam side is fixed.\"\n  exit 1\nfi\n\n# sanity check: do we actually have an exe?\ncd \"${SR_DIR}\"\nEXE_FOUND=\"$(find . -maxdepth 12 -type f \\( -iname 'StarRuptureServerEOS*.exe' -o -iname '*Shipping.exe' \\) 2>/dev/null | head -n 1)\"\nif [ -z \"$EXE_FOUND\" ]; then\n  echo \"ERROR: Install finished but no server executable found.\"\n  echo \"Listing:\"; ls -la\n  exit 1\nfi\n\necho \"Installed OK. Found executable: $EXE_FOUND\"\necho \"-----------------------------------------\"\necho \"Installation completed.\"\necho \"-----------------------------------------\"",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
@@ -105,7 +105,7 @@
     },
     {
       "name": "Steam Username (optional)",
-      "description": "Only set if anonymous fails.",
+      "description": "If anonymous fails, set a Steam account here.",
       "env_variable": "STEAM_USER",
       "default_value": "",
       "user_viewable": true,
@@ -119,7 +119,7 @@
     },
     {
       "name": "Steam Password (optional)",
-      "description": "Only set if you set Steam Username.",
+      "description": "Steam account password (only if Steam Username is set).",
       "env_variable": "STEAM_PASS",
       "default_value": "",
       "user_viewable": true,
