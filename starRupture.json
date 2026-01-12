@@ -1,11 +1,12 @@
 {
-  "_comment": "StarRupture Dedicated Server - Pelican Egg (Proton)",
+  "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL",
   "meta": {
     "version": "PLCN_v1"
   },
+  "exported_at": "2026-01-12T18:20:00+01:00",
   "name": "StarRupture",
   "author": "L4Curtis",
-  "description": "StarRupture Dedicated Server running via Proton (Windows server on Linux). Uses Epic Online Services (EOS). Server password is created IN-GAME via Manage Server.",
+  "description": "StarRupture Dedicated Server (EOS) via Proton. Download via SteamCMD (anonymous). Password is created in-game via Manage Server.",
   "features": [
     "steam_disk_space"
   ],
@@ -14,18 +15,20 @@
     "Proton": "ghcr.io/parkervcp/steamcmd:proton"
   },
 
+  "file_denylist": [],
+
   "startup": "proton run ./StarRuptureServerEOS.exe -Log -MULTIHOME={{SERVER_IP}} -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\"{{SERVER_NAME}}\" {{EXTRA_FLAGS}}",
 
   "config": {
-    "startup": {
-      "done": "LogInit"
-    },
+    "files": "{}",
+    "startup": "{ \"done\": \"LogInit\" }",
+    "logs": "{}",
     "stop": "^C"
   },
 
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# StarRupture Dedicated Server Install Script\n\nif [[ -z \"$STEAM_USER\" || -z \"$STEAM_PASS\" ]]; then\n  STEAM_USER=anonymous\n  STEAM_PASS=\"\"\n  STEAM_AUTH=\"\"\nfi\n\ncd /tmp\nmkdir -p /mnt/server/steamcmd\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzvf steamcmd.tar.gz -C /mnt/server/steamcmd\n\nmkdir -p /mnt/server/steamapps\ncd /mnt/server/steamcmd\nexport HOME=/mnt/server\n\n./steamcmd.sh +@sSteamCmdForcePlatformType windows +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} +force_install_dir /mnt/server +app_update 3809400 validate +quit\n\n# Steam libraries\nmkdir -p /mnt/server/.steam/sdk32\nmkdir -p /mnt/server/.steam/sdk64\ncp linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so\ncp linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so\n\n# Optional password reset\nif [[ \"$RESET_PASSWORD\" == \"1\" ]]; then\n  rm -f /mnt/server/Password.json\nfi\n\necho \"StarRupture installation complete\"",
+      "script": "#!/bin/bash\nset -e\n\n# StarRupture Dedicated Server Install (SteamCMD anonymous)\n\ncd /tmp\nmkdir -p /mnt/server/steamcmd\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd\n\nmkdir -p /mnt/server/steamapps\ncd /mnt/server/steamcmd\nexport HOME=/mnt/server\n\n./steamcmd.sh +@sSteamCmdForcePlatformType windows +login anonymous +force_install_dir /mnt/server +app_update 3809400 validate +quit\n\n# Steam libraries\nmkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64\ncp -f linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so || true\ncp -f linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so || true\n\n# Optional password reset\nif [[ \"${RESET_PASSWORD}\" == \"1\" ]]; then\n  rm -f /mnt/server/Password.json\nfi\n\necho \"StarRupture install complete\"",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
@@ -39,47 +42,38 @@
       "default_value": "StarRupture Dedicated Server",
       "user_viewable": true,
       "user_editable": true,
-      "rules": ["required", "string", "max:128"]
+      "rules": ["required","string","max:128"]
     },
     {
       "name": "Server IP (MULTIHOME)",
-      "description": "Adresse IP d'écoute du serveur. Utilise 0.0.0.0 pour écouter sur toutes les interfaces.",
+      "description": "IP d'écoute. 0.0.0.0 pour toutes les interfaces.",
       "env_variable": "SERVER_IP",
       "default_value": "0.0.0.0",
       "user_viewable": true,
       "user_editable": true,
-      "rules": ["required", "string", "max:64"]
-    },
-    {
-      "name": "Server Port",
-      "description": "Port principal du serveur (doit correspondre au port alloué par le panel).",
-      "env_variable": "SERVER_PORT",
-      "default_value": "7777",
-      "user_viewable": true,
-      "user_editable": false,
-      "rules": ["required", "integer", "min:1025", "max:65535"]
+      "rules": ["required","string","max:64"]
     },
     {
       "name": "Query Port",
-      "description": "Port de requête utilisé par le serveur (EOS / discovery).",
+      "description": "Port de requête / discovery.",
       "env_variable": "QUERY_PORT",
       "default_value": "27015",
       "user_viewable": true,
       "user_editable": false,
-      "rules": ["required", "integer", "min:1025", "max:65535"]
+      "rules": ["required","integer","min:1025","max:65535"]
     },
     {
       "name": "Extra Launch Flags",
-      "description": "Arguments supplémentaires passés à StarRuptureServerEOS.exe (optionnel).",
+      "description": "Arguments supplémentaires pour le serveur (optionnel).",
       "env_variable": "EXTRA_FLAGS",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
-      "rules": ["nullable", "string", "max:512"]
+      "rules": ["nullable","string","max:512"]
     },
     {
       "name": "Reset Server Password",
-      "description": "Supprime Password.json lors de l'installation pour forcer la redéfinition du mot de passe en jeu.",
+      "description": "Supprime Password.json pour forcer la redéfinition du mot de passe en jeu.",
       "env_variable": "RESET_PASSWORD",
       "default_value": "0",
       "user_viewable": true,
