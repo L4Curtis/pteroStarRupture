@@ -5,10 +5,10 @@
     "update_url": null
   },
   "exported_at": "2026-01-12T00:00:00+01:00",
-  "name": "StarRupture Dedicated Server (Proton)",
+  "name": "StarRupture Dedicated Server (Wine/Proton + SteamCMD)",
   "author": "curtis",
-  "uuid": "6c6d6f6b-1f7a-4c23-9e3a-0d2d4b3a7d9c",
-  "description": "StarRupture dedicated server using SteamCMD (AppID 3809400) + Proton to run the Windows binary (StarRuptureServerEOS.exe). Ports: 7777/UDP game, 27015/UDP query.",
+  "uuid": "1c0e0d2f-6c4b-4a8f-8d43-6a5c3d0d4a91",
+  "description": "StarRupture dedicated server (Windows) on Linux via Wine/Proton. Installs with SteamCMD (AppID 3809400) and starts with xvfb-run + wine. Ports: Game 7777 (UDP+TCP), Query 27015 (UDP).",
   "features": [
     "steam_disk_space"
   ],
@@ -16,26 +16,26 @@
     "Proton": "ghcr.io/parkervcp/steamcmd:proton"
   },
   "file_denylist": [],
-  "startup": "cd /mnt/server && echo \"Starting StarRupture...\" && proton run ./StarRuptureServerEOS.exe -Log -MULTIHOME={{MULTIHOME}} -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\\\"{{SERVER_NAME}}\\\" $( [ -z \"${MAX_PLAYERS}\" ] || printf %s \" -MaxPlayers=${MAX_PLAYERS}\" ) {{ADDITIONAL_FLAGS}}",
+  "startup": "cd /home/container || exit 1; echo \"Starting StarRupture...\"; export WINEDEBUG=-all; SERVER_EXEC=\"\"; for p in \"./StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe\" \"./StarRupture/Binaries/Win64/StarRuptureServerEOS.exe\" \"./StarRuptureServerEOS.exe\"; do [ -f \"$p\" ] && SERVER_EXEC=\"$p\" && break; done; if [ -z \"$SERVER_EXEC\" ]; then SERVER_EXEC=\"$(find . -maxdepth 8 -type f \\( -iname '*StarRuptureServerEOS*.exe' -o -iname '*Shipping.exe' \\) 2>/dev/null | head -n 1)\"; fi; if [ -z \"$SERVER_EXEC\" ]; then echo \"ERROR: StarRupture server executable not found in /home/container\"; echo \"Top-level listing:\"; ls -la; exit 1; fi; echo \"Found server exec: $SERVER_EXEC\"; CMD=\"xvfb-run --auto-servernum wine \\\"$SERVER_EXEC\\\" -Log -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\\\"{{SERVER_NAME}}\\\"\"; [ -n \"${MULTIHOME}\" ] && CMD=\"$CMD -MULTIHOME=${MULTIHOME}\"; [ -n \"${MAX_PLAYERS}\" ] && CMD=\"$CMD -MaxPlayers=${MAX_PLAYERS}\"; [ -n \"${ADDITIONAL_ARGS}\" ] && CMD=\"$CMD ${ADDITIONAL_ARGS}\"; echo \"Command: $CMD\"; eval \"$CMD\"",
   "config": {
     "files": "{}",
-    "startup": "{\r\n  \"done\": \"LogInit\"\r\n}",
+    "startup": "{\n  \"done\": \"Starting StarRupture\"\n}",
     "logs": "{}",
     "stop": "^C"
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\r\n# SteamCMD Base Installation Script\r\n#\r\n# Server Files: /mnt/server\r\n# Image to install with is 'ghcr.io/parkervcp/installers:debian'\r\n\r\nset -e\r\n\r\n# ---- Steam credentials (optional) ----\r\nif [[ \"${STEAM_USER}\" == \"\" ]] || [[ \"${STEAM_PASS}\" == \"\" ]]; then\r\n  echo -e \"Steam user not set, using anonymous.\\n\"\r\n  STEAM_USER=anonymous\r\n  STEAM_PASS=\"\"\r\n  STEAM_AUTH=\"\"\r\nelse\r\n  echo -e \"Using Steam user: ${STEAM_USER}\\n\"\r\nfi\r\n\r\n# ---- Download steamcmd ----\r\ncd /tmp\r\nmkdir -p /mnt/server/steamcmd\r\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\r\ntar -xzvf steamcmd.tar.gz -C /mnt/server/steamcmd\r\nmkdir -p /mnt/server/steamapps\r\ncd /mnt/server/steamcmd\r\n\r\nchown -R root:root /mnt\r\nexport HOME=/mnt/server\r\n\r\n# ---- Install game (Windows build) ----\r\nWINDOWS_INSTALL=1\r\nSRCDS_APPID=\"${SRCDS_APPID:-3809400}\"\r\nAUTO_UPDATE=\"${AUTO_UPDATE:-1}\"\r\n\r\nif [[ \"${AUTO_UPDATE}\" != \"1\" ]]; then\r\n  echo \"AUTO_UPDATE is disabled; skipping install/update.\"\r\n  exit 0\r\nfi\r\n\r\n./steamcmd.sh \\\r\n  +force_install_dir /mnt/server \\\r\n  +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\r\n  +@sSteamCmdForcePlatformType windows \\\r\n  +app_update ${SRCDS_APPID} validate \\\r\n  +quit\r\n\r\n# ---- Steam libs (common fix) ----\r\nmkdir -p /mnt/server/.steam/sdk32\r\nmkdir -p /mnt/server/.steam/sdk64\r\ncp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so || true\r\ncp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so || true\r\n\r\n# ---- Create common UE directories (optional) ----\r\nmkdir -p /mnt/server/Saved/Config/WindowsServer\r\nmkdir -p /mnt/server/Saved/Logs\r\nmkdir -p /mnt/server/Saved/SaveGames\r\necho \"--fresh install--\" >> /mnt/server/Saved/Logs/StarRupture.log\r\n\r\necho \"-----------------------------------------\"\r\necho \"Installation completed...\"\r\necho \"-----------------------------------------\"",
-      "container": "ghcr.io/parkervcp/installers:debian",
+      "script": "#!/bin/bash\nset -e\n\nAPPID=\"3809400\"\nSR_DIR=\"/mnt/server\"\n\n# Optional deps for fallback path\nif command -v apt-get >/dev/null 2>&1; then\n  apt-get update -y || true\n  # wine/xvfb are usually already present in proton image, but make sure unzip/xvfb exist\n  apt-get install -y --no-install-recommends unzip xvfb xauth ca-certificates curl || true\n  rm -rf /var/lib/apt/lists/* || true\nfi\n\n# Steam credentials (optional)\nif [[ -n \"${STEAM_USER}\" && -n \"${STEAM_PASS}\" ]]; then\n  echo \"Using Steam user: ${STEAM_USER}\"\nelse\n  echo \"steam user is not set or incomplete. Using anonymous user.\"\n  STEAM_USER=\"anonymous\"\n  STEAM_PASS=\"\"\n  STEAM_AUTH=\"\"\nfi\n\nmkdir -p \"${SR_DIR}/steamcmd\" \"${SR_DIR}/steamapps\"\n\necho \"==[1/2] Try Linux SteamCMD forcing Windows (64-bit)==\"\ncd /tmp\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\nrm -rf \"${SR_DIR}/steamcmd\"/* || true\ntar -xzf steamcmd_linux.tar.gz -C \"${SR_DIR}/steamcmd\"\ncd \"${SR_DIR}/steamcmd\"\n\nexport HOME=\"${SR_DIR}\"\n\nset +e\n./steamcmd.sh \\\n  +@sSteamCmdForcePlatformType windows \\\n  +@sSteamCmdForcePlatformBitness 64 \\\n  +force_install_dir \"${SR_DIR}\" \\\n  +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n  +app_update ${APPID} validate \\\n  +quit\nLINUX_RC=$?\nset -e\n\nif [ \"${LINUX_RC}\" -eq 0 ]; then\n  echo \"Linux SteamCMD install OK.\"\nelse\n  echo \"Linux SteamCMD failed (rc=${LINUX_RC}). Fallback to Windows SteamCMD via Wine...\"\n\n  echo \"==[2/2] Windows SteamCMD under Wine (xvfb)==\"\n  cd /tmp\n  curl -sSL -o steamcmd.zip https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip\n  mkdir -p \"${SR_DIR}/steamcmd_win\"\n  rm -rf \"${SR_DIR}/steamcmd_win\"/* || true\n  unzip -oq steamcmd.zip -d \"${SR_DIR}/steamcmd_win\"\n\n  cd \"${SR_DIR}/steamcmd_win\"\n\n  # IMPORTANT: map the install dir for wine as Z:\\mnt\\server\n  export WINEDEBUG=-all\n  xvfb-run --auto-servernum wine steamcmd.exe \\\n    +@sSteamCmdForcePlatformType windows \\\n    +force_install_dir \"Z:\\\\mnt\\\\server\" \\\n    +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n    +app_update ${APPID} validate \\\n    +quit\nfi\n\n# Create common directories (not mandatory but nice)\nmkdir -p \"${SR_DIR}/Saved/Logs\" \"${SR_DIR}/Saved/Config/WindowsServer\" \"${SR_DIR}/Saved/SaveGames\" || true\n\necho \"-----------------------------------------\"\necho \"Installation completed...\"\necho \"-----------------------------------------\"",
+      "container": "ghcr.io/parkervcp/steamcmd:proton",
       "entrypoint": "bash"
     }
   },
   "variables": [
     {
       "name": "Server Name",
-      "description": "Dedicated server name (-ServerName=\"...\")",
+      "description": "Dedicated server display name (-ServerName=\"...\")",
       "env_variable": "SERVER_NAME",
-      "default_value": "A Pelican Hosted StarRupture Server",
+      "default_value": "starrupture-server",
       "user_viewable": true,
       "user_editable": true,
       "rules": [
@@ -46,22 +46,8 @@
       "sort": 1
     },
     {
-      "name": "MultiHome (Bind IP)",
-      "description": "IP used by -MULTIHOME. Usually leave to the default (server allocation IP).",
-      "env_variable": "MULTIHOME",
-      "default_value": "{{SERVER_IP}}",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": [
-        "required",
-        "string",
-        "max:64"
-      ],
-      "sort": 2
-    },
-    {
       "name": "Query Port",
-      "description": "Query port (-QueryPort). Add a SECOND allocation and set this value to it (default 27015).",
+      "description": "Query port (-QueryPort). Needs UDP open. Add a SECOND allocation if you want 27015 different from the main port.",
       "env_variable": "QUERY_PORT",
       "default_value": "27015",
       "user_viewable": true,
@@ -72,11 +58,11 @@
         "min:1025",
         "max:65535"
       ],
-      "sort": 3
+      "sort": 2
     },
     {
       "name": "Max Players",
-      "description": "Optional (-MaxPlayers=#). Leave blank if not supported by your build.",
+      "description": "Optional (-MaxPlayers=#). Leave blank if you don't want to set it.",
       "env_variable": "MAX_PLAYERS",
       "default_value": "",
       "user_viewable": true,
@@ -85,14 +71,28 @@
         "nullable",
         "integer",
         "min:1",
-        "max:200"
+        "max:128"
+      ],
+      "sort": 3
+    },
+    {
+      "name": "MultiHome",
+      "description": "Optional: bind to a specific IP (-MULTIHOME=IP). Leave empty to not use it.",
+      "env_variable": "MULTIHOME",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": [
+        "nullable",
+        "string",
+        "max:64"
       ],
       "sort": 4
     },
     {
-      "name": "Additional Flags",
-      "description": "Any extra launch flags appended at the end (example: -SomeFlag=1).",
-      "env_variable": "ADDITIONAL_FLAGS",
+      "name": "Additional Args",
+      "description": "Extra server args appended to the command line (optional).",
+      "env_variable": "ADDITIONAL_ARGS",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
@@ -104,30 +104,46 @@
       "sort": 5
     },
     {
-      "name": "Auto-update server",
-      "description": "Enable auto updating on reinstall/restart (1=on, 0=off).",
-      "env_variable": "AUTO_UPDATE",
-      "default_value": "1",
+      "name": "Steam Username (optional)",
+      "description": "Only set if anonymous fails for your AppID. Otherwise leave empty.",
+      "env_variable": "STEAM_USER",
+      "default_value": "",
       "user_viewable": true,
       "user_editable": true,
       "rules": [
-        "boolean"
+        "nullable",
+        "string",
+        "max:128"
       ],
       "sort": 6
     },
     {
-      "name": "App ID",
-      "description": "Steam AppID for StarRupture dedicated server (hidden).",
-      "env_variable": "SRCDS_APPID",
-      "default_value": "3809400",
-      "user_viewable": false,
-      "user_editable": false,
+      "name": "Steam Password (optional)",
+      "description": "Only set if you also set Steam Username. Otherwise leave empty.",
+      "env_variable": "STEAM_PASS",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
       "rules": [
-        "required",
-        "integer",
-        "in:3809400"
+        "nullable",
+        "string",
+        "max:128"
       ],
       "sort": 7
+    },
+    {
+      "name": "Steam 2FA Code (optional)",
+      "description": "Steam Guard code if needed (usually not used).",
+      "env_variable": "STEAM_AUTH",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": [
+        "nullable",
+        "string",
+        "max:16"
+      ],
+      "sort": 8
     }
   ]
 }
