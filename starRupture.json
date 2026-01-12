@@ -4,28 +4,27 @@
     "version": "PLCN_v1",
     "update_url": null
   },
-  "exported_at": "2026-01-12T22:10:00+01:00",
-  "name": "StarRupture Dedicated Server (Wine + SteamCMD | Pelican FIXED)",
+  "exported_at": "2026-01-12T23:30:00+01:00",
+  "name": "StarRupture Dedicated Server (SteamCMD)",
   "author": "curtis",
-  "uuid": "9f6e4a9d-5d64-4c65-9e93-ecb8f5b6e912",
-  "description": "StarRupture Dedicated Server on Pelican using Wine (rootless) + SteamCMD Windows 64-bit. Includes Pelican-safe Xvfb wrapper (no /tmp/.X11-unix).",
+  "description": "StarRupture Dedicated Server installed via SteamCMD (AppID 3809400) and started with official launch parameters using Wine. Pelican compatible.",
   "features": [
     "steam_disk_space"
   ],
   "docker_images": {
-    "Wine Staging": "ghcr.io/parkervcp/yolks:wine_staging"
+    "Wine + SteamCMD": "ghcr.io/parkervcp/yolks:wine_staging"
   },
   "file_denylist": [],
-  "startup": "bash -lc 'cd /home/container || exit 1\n\n# ---------- ENV ----------\nexport HOME=/home/container\nexport WINEPREFIX=\"${WINEPREFIX:-/home/container/.wine}\"\nexport WINEDEBUG=\"${WINEDEBUG:--all}\"\nmkdir -p \"$WINEPREFIX\" /home/container/.xvfb\n\n# ---------- Xvfb wrapper (Pelican-safe) ----------\nxvfb() { xvfb-run -f /home/container/.Xauthority -s \"-screen 0 1024x768x16 -nolisten tcp -ac\" \"$@\"; }\n\n# ---------- Wine init (first run only) ----------\nif [ ! -f \"$WINEPREFIX/.init_done\" ]; then\n  echo \"[SR] Initializing Wine prefix\"\n  xvfb wineboot -u || true\n  if command -v winetricks >/dev/null 2>&1; then\n    xvfb winetricks -q vcrun2022 || true\n  fi\n  touch \"$WINEPREFIX/.init_done\"\nfi\n\n# ---------- Locate server executable ----------\nSERVER_EXEC=\"\"\nfor p in \"./StarRupture/Binaries/Win64/StarRuptureServerEOS-Win64-Shipping.exe\" \"./StarRupture/Binaries/Win64/StarRuptureServerEOS.exe\" \"./StarRuptureServerEOS.exe\"; do\n  [ -f \"$p\" ] && SERVER_EXEC=\"$p\" && break\ndone\nif [ -z \"$SERVER_EXEC\" ]; then\n  SERVER_EXEC=\"$(find . -maxdepth 10 -type f \\( -iname \"*StarRuptureServerEOS*\" -o -iname \"*Win64-Shipping.exe\" \\) 2>/dev/null | head -n 1)\"\nfi\nif [ -z \"$SERVER_EXEC\" ]; then\n  echo \"[SR] ERROR: StarRupture server executable not found. Run Install/Reinstall first.\"\n  ls -la\n  exit 1\nfi\n\n# ---------- Build arguments ----------\nARGS=\"-Log -Port=${SERVER_PORT} -QueryPort=${QUERY_PORT} -ServerName=\\\"${SERVER_NAME}\\\"\"\n[ -n \"${MULTIHOME:-}\" ] && ARGS=\"$ARGS -MULTIHOME=${MULTIHOME}\"\n[ -n \"${MAX_PLAYERS:-}\" ] && ARGS=\"$ARGS -MaxPlayers=${MAX_PLAYERS}\"\n[ -n \"${EXTRA_ARGS:-}\" ] && ARGS=\"$ARGS ${EXTRA_ARGS}\"\n\necho \"[SR] Starting StarRupture: $SERVER_EXEC $ARGS\"\n\nterm_handler() {\n  echo \"[SR] Stop signal received\"\n  kill -TERM \"$SR_PID\" 2>/dev/null || true\n  wait \"$SR_PID\" 2>/dev/null || true\n  exit 0\n}\ntrap term_handler SIGTERM SIGINT\n\nxvfb wine \"$SERVER_EXEC\" $ARGS -unattended &\nSR_PID=$!\nwait \"$SR_PID\"'",
+  "startup": "bash -lc 'cd /home/container || exit 1\n\nexport HOME=/home/container\nexport WINEPREFIX=/home/container/.wine\nexport WINEDEBUG=-all\n\nmkdir -p \"$WINEPREFIX\"\n\n# First Wine init\nif [ ! -f \"$WINEPREFIX/.init_done\" ]; then\n  echo \"[SR] Initializing Wine\"\n  wineboot -u || true\n  touch \"$WINEPREFIX/.init_done\"\nfi\n\n# Locate server binary (official name)\nSERVER_EXE=\"./StarRuptureServerEOS.exe\"\nif [ ! -f \"$SERVER_EXE\" ]; then\n  SERVER_EXE=\"$(find . -maxdepth 3 -type f -iname 'StarRuptureServerEOS.exe' | head -n 1)\"\nfi\n\nif [ -z \"$SERVER_EXE\" ] || [ ! -f \"$SERVER_EXE\" ]; then\n  echo \"[SR] ERROR: StarRuptureServerEOS.exe not found\"\n  ls -la\n  exit 1\nfi\n\n# Build official arguments\nARGS=\"-Log -Port=${SERVER_PORT} -QueryPort=${QUERY_PORT} -ServerName=\\\"${SERVER_NAME}\\\"\"\n[ -n \"${MULTIHOME}\" ] && ARGS=\"$ARGS -MULTIHOME=${MULTIHOME}\"\n[ -n \"${MAX_PLAYERS}\" ] && ARGS=\"$ARGS -MaxPlayers=${MAX_PLAYERS}\"\n\necho \"[SR] Starting server: $SERVER_EXE $ARGS\"\n\nwine \"$SERVER_EXE\" $ARGS'",
   "config": {
     "files": "{}",
-    "startup": "{\n  \"done\": \"[SR] Starting StarRupture\"\n}",
+    "startup": "{\n  \"done\": \"Starting StarRupture\"\n}",
     "logs": "{}",
     "stop": "^C"
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\nset -e\n\nAPPID=3809400\nSTEAM_USER=\"${STEAM_USER:-anonymous}\"\nSTEAM_PASS=\"${STEAM_PASS:-}\"\nSTEAM_AUTH=\"${STEAM_AUTH:-}\"\n\nmkdir -p /mnt/server/steamcmd\ncd /mnt/server/steamcmd\n\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzf steamcmd_linux.tar.gz\nmkdir -p /mnt/server/steamapps\n\n./steamcmd.sh \\\n  +@ShutdownOnFailedCommand 1 \\\n  +@NoPromptForPassword 1 \\\n  +@sSteamCmdForcePlatformType windows \\\n  +@sSteamCmdForcePlatformBitness 64 \\\n  +force_install_dir /mnt/server \\\n  +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\n  +app_update ${APPID} validate \\\n  +quit\n\nif ! find /mnt/server -type f -iname '*StarRuptureServerEOS*exe' | grep -q .; then\n  echo \"[SR] ERROR: Executable not found after install. If SteamCMD shows 'Missing configuration'/'No subscription', use a real Steam account in STEAM_USER/STEAM_PASS.\"\n  exit 1\nfi\n\necho \"[SR] Installation complete.\"",
+      "script": "#!/bin/bash\nset -e\n\nAPPID=3809400\n\nmkdir -p /mnt/server/steamcmd\ncd /mnt/server/steamcmd\n\n# Download SteamCMD\ncurl -sSL -o steamcmd_linux.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzf steamcmd_linux.tar.gz\n\nmkdir -p /mnt/server/steamapps\n\n# Install StarRupture Dedicated Server (Windows)\n./steamcmd.sh \\\n  +@ShutdownOnFailedCommand 1 \\\n  +@NoPromptForPassword 1 \\\n  +@sSteamCmdForcePlatformType windows \\\n  +force_install_dir /mnt/server \\\n  +login anonymous \\\n  +app_update ${APPID} validate \\\n  +quit\n\n# Validate install\nif [ ! -f \"/mnt/server/StarRuptureServerEOS.exe\" ]; then\n  echo \"[SR] ERROR: StarRuptureServerEOS.exe not found after install\"\n  find /mnt/server -type f\n  exit 1\nfi\n\necho \"[SR] StarRupture installation complete\"",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
@@ -33,117 +32,43 @@
   "variables": [
     {
       "name": "Server Name",
-      "description": "Dedicated server name shown in-game (-ServerName).",
+      "description": "Server name shown in the in-game server list",
       "env_variable": "SERVER_NAME",
-      "default_value": "A Pelican Hosted StarRupture Server",
+      "default_value": "My Starrupture Server",
       "user_viewable": true,
       "user_editable": true,
-      "rules": [
-        "required",
-        "string",
-        "max:128"
-      ],
+      "rules": ["required", "string", "max:128"],
       "sort": 1
     },
     {
       "name": "Query Port",
-      "description": "UDP query port (-QueryPort). Make sure this port is allocated/open in Pelican.",
+      "description": "Steam query port (UDP)",
       "env_variable": "QUERY_PORT",
       "default_value": "27015",
       "user_viewable": true,
       "user_editable": true,
-      "rules": [
-        "required",
-        "integer",
-        "min:1025",
-        "max:65535"
-      ],
+      "rules": ["required", "integer", "min:1025", "max:65535"],
       "sort": 2
     },
     {
       "name": "MultiHome",
-      "description": "Optional bind IP (-MULTIHOME). Leave empty for default.",
+      "description": "Bind server to a specific IP address (-MULTIHOME)",
       "env_variable": "MULTIHOME",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
-      "rules": [
-        "nullable",
-        "string",
-        "max:64"
-      ],
+      "rules": ["nullable", "string", "max:64"],
       "sort": 3
     },
     {
       "name": "Max Players",
-      "description": "Optional maximum players (-MaxPlayers). Leave empty to use game default.",
+      "description": "Maximum number of players (-MaxPlayers)",
       "env_variable": "MAX_PLAYERS",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
-      "rules": [
-        "nullable",
-        "integer",
-        "min:1",
-        "max:200"
-      ],
+      "rules": ["nullable", "integer", "min:1", "max:200"],
       "sort": 4
-    },
-    {
-      "name": "Extra Arguments",
-      "description": "Optional extra launch arguments appended at the end (advanced).",
-      "env_variable": "EXTRA_ARGS",
-      "default_value": "",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": [
-        "nullable",
-        "string",
-        "max:1024"
-      ],
-      "sort": 5
-    },
-    {
-      "name": "Steam Username",
-      "description": "Steam username for SteamCMD (default: anonymous). Use a real account if anonymous fails.",
-      "env_variable": "STEAM_USER",
-      "default_value": "anonymous",
-      "user_viewable": true,
-      "user_editable": true,
-      "rules": [
-        "required",
-        "string",
-        "max:64"
-      ],
-      "sort": 6
-    },
-    {
-      "name": "Steam Password",
-      "description": "Steam password (only if using a real Steam account).",
-      "env_variable": "STEAM_PASS",
-      "default_value": "",
-      "user_viewable": false,
-      "user_editable": true,
-      "rules": [
-        "nullable",
-        "string",
-        "max:128"
-      ],
-      "sort": 7
-    },
-    {
-      "name": "Steam Guard Code",
-      "description": "Steam Guard / 2FA code (only if needed).",
-      "env_variable": "STEAM_AUTH",
-      "default_value": "",
-      "user_viewable": false,
-      "user_editable": true,
-      "rules": [
-        "nullable",
-        "string",
-        "max:64"
-      ],
-      "sort": 8
     }
   ]
 }
