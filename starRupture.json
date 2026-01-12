@@ -1,84 +1,133 @@
 {
   "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PANEL",
   "meta": {
-    "version": "PLCN_v1"
+    "version": "PLCN_v1",
+    "update_url": null
   },
-  "exported_at": "2026-01-12T18:20:00+01:00",
-  "name": "StarRupture",
-  "author": "L4Curtis",
-  "description": "StarRupture Dedicated Server (EOS) via Proton. Download via SteamCMD (anonymous). Password is created in-game via Manage Server.",
+  "exported_at": "2026-01-12T00:00:00+01:00",
+  "name": "StarRupture Dedicated Server (Proton)",
+  "author": "curtis",
+  "uuid": "6c6d6f6b-1f7a-4c23-9e3a-0d2d4b3a7d9c",
+  "description": "StarRupture dedicated server using SteamCMD (AppID 3809400) + Proton to run the Windows binary (StarRuptureServerEOS.exe). Ports: 7777/UDP game, 27015/UDP query.",
   "features": [
     "steam_disk_space"
   ],
-
   "docker_images": {
     "Proton": "ghcr.io/parkervcp/steamcmd:proton"
   },
-
   "file_denylist": [],
-
-  "startup": "proton run ./StarRuptureServerEOS.exe -Log -MULTIHOME={{SERVER_IP}} -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\"{{SERVER_NAME}}\" {{EXTRA_FLAGS}}",
-
+  "startup": "cd /mnt/server && echo \"Starting StarRupture...\" && proton run ./StarRuptureServerEOS.exe -Log -MULTIHOME={{MULTIHOME}} -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerName=\\\"{{SERVER_NAME}}\\\" $( [ -z \"${MAX_PLAYERS}\" ] || printf %s \" -MaxPlayers=${MAX_PLAYERS}\" ) {{ADDITIONAL_FLAGS}}",
   "config": {
     "files": "{}",
-    "startup": "{ \"done\": \"LogInit\" }",
+    "startup": "{\r\n  \"done\": \"LogInit\"\r\n}",
     "logs": "{}",
     "stop": "^C"
   },
-
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\nset -e\n\n# StarRupture Dedicated Server Install (SteamCMD anonymous)\n\ncd /tmp\nmkdir -p /mnt/server/steamcmd\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\ntar -xzf steamcmd.tar.gz -C /mnt/server/steamcmd\n\nmkdir -p /mnt/server/steamapps\ncd /mnt/server/steamcmd\nexport HOME=/mnt/server\n\n./steamcmd.sh +@sSteamCmdForcePlatformType windows +login anonymous +force_install_dir /mnt/server +app_update 3809400 validate +quit\n\n# Steam libraries\nmkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64\ncp -f linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so || true\ncp -f linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so || true\n\n# Optional password reset\nif [[ \"${RESET_PASSWORD}\" == \"1\" ]]; then\n  rm -f /mnt/server/Password.json\nfi\n\necho \"StarRupture install complete\"",
+      "script": "#!/bin/bash\r\n# SteamCMD Base Installation Script\r\n#\r\n# Server Files: /mnt/server\r\n# Image to install with is 'ghcr.io/parkervcp/installers:debian'\r\n\r\nset -e\r\n\r\n# ---- Steam credentials (optional) ----\r\nif [[ \"${STEAM_USER}\" == \"\" ]] || [[ \"${STEAM_PASS}\" == \"\" ]]; then\r\n  echo -e \"Steam user not set, using anonymous.\\n\"\r\n  STEAM_USER=anonymous\r\n  STEAM_PASS=\"\"\r\n  STEAM_AUTH=\"\"\r\nelse\r\n  echo -e \"Using Steam user: ${STEAM_USER}\\n\"\r\nfi\r\n\r\n# ---- Download steamcmd ----\r\ncd /tmp\r\nmkdir -p /mnt/server/steamcmd\r\ncurl -sSL -o steamcmd.tar.gz https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz\r\ntar -xzvf steamcmd.tar.gz -C /mnt/server/steamcmd\r\nmkdir -p /mnt/server/steamapps\r\ncd /mnt/server/steamcmd\r\n\r\nchown -R root:root /mnt\r\nexport HOME=/mnt/server\r\n\r\n# ---- Install game (Windows build) ----\r\nWINDOWS_INSTALL=1\r\nSRCDS_APPID=\"${SRCDS_APPID:-3809400}\"\r\nAUTO_UPDATE=\"${AUTO_UPDATE:-1}\"\r\n\r\nif [[ \"${AUTO_UPDATE}\" != \"1\" ]]; then\r\n  echo \"AUTO_UPDATE is disabled; skipping install/update.\"\r\n  exit 0\r\nfi\r\n\r\n./steamcmd.sh \\\r\n  +force_install_dir /mnt/server \\\r\n  +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} \\\r\n  +@sSteamCmdForcePlatformType windows \\\r\n  +app_update ${SRCDS_APPID} validate \\\r\n  +quit\r\n\r\n# ---- Steam libs (common fix) ----\r\nmkdir -p /mnt/server/.steam/sdk32\r\nmkdir -p /mnt/server/.steam/sdk64\r\ncp -v linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so || true\r\ncp -v linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so || true\r\n\r\n# ---- Create common UE directories (optional) ----\r\nmkdir -p /mnt/server/Saved/Config/WindowsServer\r\nmkdir -p /mnt/server/Saved/Logs\r\nmkdir -p /mnt/server/Saved/SaveGames\r\necho \"--fresh install--\" >> /mnt/server/Saved/Logs/StarRupture.log\r\n\r\necho \"-----------------------------------------\"\r\necho \"Installation completed...\"\r\necho \"-----------------------------------------\"",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
   },
-
   "variables": [
     {
       "name": "Server Name",
-      "description": "Nom affiché du serveur StarRupture.",
+      "description": "Dedicated server name (-ServerName=\"...\")",
       "env_variable": "SERVER_NAME",
-      "default_value": "StarRupture Dedicated Server",
+      "default_value": "A Pelican Hosted StarRupture Server",
       "user_viewable": true,
       "user_editable": true,
-      "rules": ["required","string","max:128"]
+      "rules": [
+        "required",
+        "string",
+        "max:256"
+      ],
+      "sort": 1
     },
     {
-      "name": "Server IP (MULTIHOME)",
-      "description": "IP d'écoute. 0.0.0.0 pour toutes les interfaces.",
-      "env_variable": "SERVER_IP",
-      "default_value": "0.0.0.0",
+      "name": "MultiHome (Bind IP)",
+      "description": "IP used by -MULTIHOME. Usually leave to the default (server allocation IP).",
+      "env_variable": "MULTIHOME",
+      "default_value": "{{SERVER_IP}}",
       "user_viewable": true,
       "user_editable": true,
-      "rules": ["required","string","max:64"]
+      "rules": [
+        "required",
+        "string",
+        "max:64"
+      ],
+      "sort": 2
     },
     {
       "name": "Query Port",
-      "description": "Port de requête / discovery.",
+      "description": "Query port (-QueryPort). Add a SECOND allocation and set this value to it (default 27015).",
       "env_variable": "QUERY_PORT",
       "default_value": "27015",
       "user_viewable": true,
-      "user_editable": false,
-      "rules": ["required","integer","min:1025","max:65535"]
+      "user_editable": true,
+      "rules": [
+        "required",
+        "integer",
+        "min:1025",
+        "max:65535"
+      ],
+      "sort": 3
     },
     {
-      "name": "Extra Launch Flags",
-      "description": "Arguments supplémentaires pour le serveur (optionnel).",
-      "env_variable": "EXTRA_FLAGS",
+      "name": "Max Players",
+      "description": "Optional (-MaxPlayers=#). Leave blank if not supported by your build.",
+      "env_variable": "MAX_PLAYERS",
       "default_value": "",
       "user_viewable": true,
       "user_editable": true,
-      "rules": ["nullable","string","max:512"]
+      "rules": [
+        "nullable",
+        "integer",
+        "min:1",
+        "max:200"
+      ],
+      "sort": 4
     },
     {
-      "name": "Reset Server Password",
-      "description": "Supprime Password.json pour forcer la redéfinition du mot de passe en jeu.",
-      "env_variable": "RESET_PASSWORD",
-      "default_value": "0",
+      "name": "Additional Flags",
+      "description": "Any extra launch flags appended at the end (example: -SomeFlag=1).",
+      "env_variable": "ADDITIONAL_FLAGS",
+      "default_value": "",
       "user_viewable": true,
       "user_editable": true,
-      "rules": ["boolean"]
+      "rules": [
+        "nullable",
+        "string",
+        "max:1024"
+      ],
+      "sort": 5
+    },
+    {
+      "name": "Auto-update server",
+      "description": "Enable auto updating on reinstall/restart (1=on, 0=off).",
+      "env_variable": "AUTO_UPDATE",
+      "default_value": "1",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": [
+        "boolean"
+      ],
+      "sort": 6
+    },
+    {
+      "name": "App ID",
+      "description": "Steam AppID for StarRupture dedicated server (hidden).",
+      "env_variable": "SRCDS_APPID",
+      "default_value": "3809400",
+      "user_viewable": false,
+      "user_editable": false,
+      "rules": [
+        "required",
+        "integer",
+        "in:3809400"
+      ],
+      "sort": 7
     }
   ]
 }
